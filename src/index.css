@@ -1,0 +1,102 @@
+/* https://github.com/Zorium/zorium-paper */
+
+html {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  overflow: hidden;
+  background: #424242;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100%;
+  font-size: 2em;
+  font-family: sans-serif;
+}
+
+.DraftEditor-root {
+  width: 700px;
+  height: 500px;
+  background: #757575;
+  padding: 20px;
+  border-radius: 3px;
+  box-shadow: 0 2px 2px 0 rgba(0, 0, 0, 0.14),
+              0 1px 5px 0 rgba(0, 0, 0, 0.12),
+              0 3px 1px -2px rgba(0, 0, 0, 0.2);
+  color: white;
+  line-height: 1.5em;
+}
+
+.autocompletable {
+  position: relative;
+  color: #90CAF9;
+}
+
+.autocomplete {
+  position: absolute;
+  z-index: 1000;
+  left: -0.3em;
+  top: 1.2em;
+  background: white;
+  padding: 10px 0;
+  color: rgba(0, 0, 0, 0.87);
+  border-radius: 3px;
+  box-shadow: 0 2px 2px 0 rgba(0, 0, 0, 0.14),
+              0 1px 5px 0 rgba(0, 0, 0, 0.12),
+              0 3px 1px -2px rgba(0, 0, 0, 0.2);
+}
+
+.autocomplete > .result {
+  cursor: pointer;
+  padding: 0.2em 0.5em;
+  user-select: none;
+  -moz-user-modify: initial;
+  -webkit-user-modify: initial;
+  white-space: nowrap;
+}
+
+.autocomplete > .result > img {
+  vertical-align: middle;
+  border-radius: 50%;
+}
+
+.autocomplete > .result:active {
+  background: #B0BEC5;
+}
+
+.autocomplete > .is-selected {
+  background: #CFD8DC;
+}
+
+.entity {
+  background: #616161;
+  padding: 0.1em 0.3em;
+  border-radius: 0.2em;
+  user-select: none;
+  -moz-user-modify: initial;
+  -webkit-user-modify: initial;
+  white-space: nowrap;
+}
+
+.entity.hash {
+  color: #90CAF9;
+}
+
+.entity.ref {
+  color: #FFAB91;
+}
+
+.entity.person {
+  color: #A5D6A7;
+}
+
+.entity > img {
+  width: 1em;
+  height: 1em;
+  vertical-align: text-bottom;
+  margin-right: 0.2em;
+  margin-bottom: 2px;
+  border-radius: 50%;
+}
