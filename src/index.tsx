@@ -69,7 +69,8 @@ const Autocomplete = (props) => {
       className={`result ${i === autocomplete.selectedIndex ? 'is-selected' : ''}`}
       key={i}
       onMouseOver={() => autocomplete.setSelectedIndex(i)}
-      onClick={() => autocomplete.commitResult(autocomplete.type.key, result, autocomplete.start, autocomplete.end)}>
+      onClick={() =>
+        autocomplete.commitResult(autocomplete.type.key, result, autocomplete.start, autocomplete.end)}>
       {result.img ? <img src={result.img} width="50" height="50" /> : null}
       <strong>{result.text.slice(0, autocomplete.matched.length)}</strong>
       {result.text.slice(autocomplete.matched.length + 1)}
@@ -93,9 +94,9 @@ const autocompleteEntityDecorator = (type) => {
     component: (props) => {
       const result = props.contentState.getEntity(props.entityKey).getData()
 
-      return <span className={`entity ${type.class}`} data-offset-key={props.offsetKey}>
+      return <span className={`entity ${type.class}`} data-offset-key={props.offsetKey} contentEditable={false}>
         {result.img ? <img src={result.img} width="50" height="50" /> : null}
-        {props.children}
+        {result.text}
       </span>
     }
   }
@@ -111,7 +112,8 @@ const compositeDecorator = new CompositeDecorator(
 
 function MyEditor() {
   const [editorState, setEditorState] = useState(
-    EditorState.createWithContent(ContentState.createFromText('by Zolmeister #abc @def <>xyz'), compositeDecorator)
+    EditorState.createWithContent(
+      ContentState.createFromText('by Zolmeister #abc @def <>xyz'), compositeDecorator)
   )
 
   const commitResult = useCallback((entityType, result, start, end) => {
@@ -142,7 +144,7 @@ function MyEditor() {
       ' '
     )
 
-    setEditorState(EditorState.push(editorState, contentState))
+    setEditorState(EditorState.push(editorState, contentState, 'insert-autocomplete-entity'))
   }, [editorState, setEditorState, autocompleteState])
 
   const [autocompleteIndex, setAutocompleteIndex] = useState(0)
@@ -156,7 +158,8 @@ function MyEditor() {
 
     let i = anchorOffset
     while (--i > 0) {
-      if (Boolean(blockCharacterMetadata.get(i).getEntity())) return null
+      const meta = blockCharacterMetadata.get(i)
+      if (meta && Boolean(meta.getEntity())) return null
       if (/\s/.test(blockText[i])) {
         i += 1
         break

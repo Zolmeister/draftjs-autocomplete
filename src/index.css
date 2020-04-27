@@ -75,8 +75,6 @@ body {
   padding: 0.1em 0.3em;
   border-radius: 0.2em;
   user-select: none;
-  -moz-user-modify: initial;
-  -webkit-user-modify: initial;
   white-space: nowrap;
 }
 
@@ -96,7 +94,6 @@ body {
   width: 1em;
   height: 1em;
   vertical-align: text-bottom;
-  margin-right: 0.2em;
   margin-bottom: 2px;
   border-radius: 50%;
 }
