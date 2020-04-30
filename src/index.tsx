@@ -2,6 +2,7 @@ import _ from 'lodash'
 import React, {useState, useCallback, useMemo, useContext, useEffect} from 'react'
 import ReactDOM from 'react-dom'
 import {Editor, EditorState, ContentState, Modifier, Entity, CompositeDecorator, getDefaultKeyBinding} from 'draft-js'
+import data from './data.json'
 
 import 'draft-js/dist/Draft.css'
 import './index.css'
@@ -29,18 +30,26 @@ const AUTOCOMPLETE_PREFIX_TO_TYPE = _.keyBy(AUTOCOMPLETE_TYPES, 'prefix')
 
 const AutocompleteContext = React.createContext({})
 const genResults = {
-  HASH: _.memoize((text) => [...Array(4).keys()].map((_, i) => {
-    return {text: '#' + text + 'h' + Math.random().toString(36).substring(2, i + 4)}
-  })),
-  PERSON: _.memoize((text) => [...Array(4).keys()].map((_, i) => {
-    return {
-      img: `https://placekitten.com/5${i}/5${i}`,
-      text: ' ' + text + Math.random().toString(36).substring(2, i + 4)
-    }
-  })),
-  REF: _.memoize((text) => [...Array(4).keys()].map((_, i) => {
-    return {text: '<>' + text + 'r' + Math.random().toString(36).substring(2, i + 4)}
-  }))
+  HASH: _.memoize((text) =>
+    _.filter(data.hashtags, (tag) =>
+      tag.toLowerCase().startsWith('#' + text.toLowerCase()))
+    .slice(0, 4)
+    .map((tag) => {return {text: tag}})),
+  PERSON: _.memoize((text) =>
+    _.filter(data.names, (name) =>
+      name.toLowerCase().startsWith(text.toLowerCase()))
+    .slice(0, 4)
+    .map((name, i) => {
+      return {
+        img: `https://placekitten.com/5${i}/5${i}`,
+        text: ' ' + name
+      }
+    })),
+  REF: _.memoize((text) =>
+    _.filter(data.refs, (ref) =>
+      ref.toLowerCase().startsWith(text.toLowerCase()))
+    .slice(0, 4)
+    .map((ref) => {return {text: '<>' + ref.replace(/ /g, '_')}})),
 }
 
 function autocompleteStrategy(contentBlock, callback, contentState) {
