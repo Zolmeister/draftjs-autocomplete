@@ -73,7 +73,7 @@ const Autocomplete = (props) => {
         autocomplete.commitResult(autocomplete.type.key, result, autocomplete.start, autocomplete.end)}>
       {result.img ? <img src={result.img} width="50" height="50" /> : null}
       <strong>{result.text.slice(0, autocomplete.matched.length)}</strong>
-      {result.text.slice(autocomplete.matched.length + 1)}
+      {result.text.slice(autocomplete.matched.length)}
     </div>
   ) : []
 
