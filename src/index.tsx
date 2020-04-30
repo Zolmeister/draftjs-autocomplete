@@ -122,7 +122,7 @@ const compositeDecorator = new CompositeDecorator(
 function MyEditor() {
   const [editorState, setEditorState] = useState(
     EditorState.createWithContent(
-      ContentState.createFromText('by Zolmeister #abc @def <>xyz'), compositeDecorator)
+      ContentState.createFromText('by Zolmeister #dog @bob <>miami'), compositeDecorator)
   )
 
   const commitResult = useCallback((entityType, result, start, end) => {
