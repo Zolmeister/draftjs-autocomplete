@@ -46,10 +46,10 @@ const genResults = {
       }
     })),
   REF: _.memoize((text) =>
-    _.filter(data.refs, (ref) =>
+    _.filter(_.map(data.refs, (ref) => ref.replace(/ /g, '_')), (ref) =>
       ref.toLowerCase().startsWith(text.toLowerCase()))
     .slice(0, 4)
-    .map((ref) => {return {text: '<>' + ref.replace(/ /g, '_')}})),
+    .map((ref) => {return {text: '<>' + ref}})),
 }
 
 function autocompleteStrategy(contentBlock, callback, contentState) {
@@ -122,7 +122,7 @@ const compositeDecorator = new CompositeDecorator(
 function MyEditor() {
   const [editorState, setEditorState] = useState(
     EditorState.createWithContent(
-      ContentState.createFromText('by Zolmeister #dog @bob <>Miami'), compositeDecorator)
+      ContentState.createFromText('by Zolmeister #dog @Bob <>Miami'), compositeDecorator)
   )
 
   const commitResult = useCallback((entityType, result, start, end) => {
