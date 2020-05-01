@@ -17,6 +17,7 @@ body {
 }
 
 .DraftEditor-root {
+  overflow: auto;
   width: 700px;
   height: 500px;
   background: #757575;
@@ -29,16 +30,11 @@ body {
   line-height: 1.5em;
 }
 
-.autocompletable {
-  position: relative;
-  color: #90CAF9;
-}
-
 .autocomplete {
-  position: absolute;
+  position: fixed;
   z-index: 1000;
-  left: -0.3em;
-  top: 1.2em;
+  left: 0;
+  top: 0;
   background: white;
   padding: 10px 0;
   color: rgba(0, 0, 0, 0.87);
@@ -60,6 +56,7 @@ body {
 .autocomplete > .result > img {
   vertical-align: middle;
   border-radius: 50%;
+  margin-right: 12px;
 }
 
 .autocomplete > .result:active {
@@ -71,10 +68,11 @@ body {
 }
 
 .entity {
+  position: relative;
   background: #616161;
   padding: 0.1em 0.3em;
   border-radius: 0.2em;
-  user-select: none;
+  /* user-select: none; */
   white-space: nowrap;
 }
 
@@ -88,12 +86,4 @@ body {
 
 .entity.person {
   color: #A5D6A7;
-}
-
-.entity > img {
-  width: 1em;
-  height: 1em;
-  vertical-align: text-bottom;
-  margin-bottom: 2px;
-  border-radius: 50%;
 }

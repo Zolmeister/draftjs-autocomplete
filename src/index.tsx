@@ -1,5 +1,5 @@
 import _ from 'lodash'
-import React, {useState, useCallback, useMemo, useContext, useEffect} from 'react'
+import React, {useState, useCallback, useMemo, useContext, useEffect, useRef, useLayoutEffect} from 'react'
 import ReactDOM from 'react-dom'
 import {Editor, EditorState, ContentState, Modifier, Entity, CompositeDecorator, getDefaultKeyBinding} from 'draft-js'
 import data from './data.json'
@@ -7,7 +7,6 @@ import data from './data.json'
 import 'draft-js/dist/Draft.css'
 import './index.css'
 
-const AUTOCOMPLETE_REGEX = /(^|\s)(#|@|<>)(\S*)/g
 const AUTOCOMPLETE_TYPES = [
   {
     key: 'HASH',
@@ -36,62 +35,92 @@ const genResults = {
     .slice(0, 4)
     .map((tag) => {return {text: tag}})),
   PERSON: _.memoize((text) =>
-    _.filter(data.names, (name) =>
+    _.filter(_.map(data.names, (name) => name + ' ' + name), (name) =>
       name.toLowerCase().startsWith(text.toLowerCase()))
     .slice(0, 4)
     .map((name, i) => {
       return {
         img: `https://placekitten.com/5${i}/5${i}`,
-        text: ' ' + name
+        text: '@' + name
       }
     })),
   REF: _.memoize((text) =>
-    _.filter(_.map(data.refs, (ref) => ref.replace(/ /g, '_')), (ref) =>
+    _.filter(data.refs, (ref) =>
       ref.toLowerCase().startsWith(text.toLowerCase()))
     .slice(0, 4)
     .map((ref) => {return {text: '<>' + ref}})),
 }
 
-function autocompleteStrategy(contentBlock, callback, contentState) {
-  findWithRegex(AUTOCOMPLETE_REGEX, contentBlock, callback)
-}
+const Autocomplete = ({text, results, onResult, events}) => {
+  const [selectedIndex, setSelectedIndex] = useState(0)
 
-// https://github.com/facebook/draft-js/blob/master/examples/draft-0-10-0/tweet/tweet.html
-function findWithRegex(regex, contentBlock, callback) {
-  const text = contentBlock.getText()
-  let matchArr, start
-  while ((matchArr = regex.exec(text)) !== null) {
-    start = matchArr.index
-    callback(start, start + matchArr[0].length)
-  }
-}
+  useEffect(() => {
+    if (selectedIndex > results.length - 1) setSelectedIndex(0)
+  }, [results.length])
 
-const Autocomplete = (props) => {
-  const autocomplete = useContext(AutocompleteContext)
-  const shouldShow = autocomplete &&
-    autocomplete.blockKey === props.blockKey &&
-    autocomplete.start >= props.start &&
-    autocomplete.start <= props.end
+  const onNext = useCallback(() => {
+    setSelectedIndex((selectedIndex + 1) % results.length)
+  }, [selectedIndex, setSelectedIndex, results])
 
-  const resultItems = shouldShow ? autocomplete.results.map((result, i) =>
+  const onPrev = useCallback(() => {
+    setSelectedIndex(selectedIndex === 0 ? results.length - 1 : selectedIndex - 1)
+  }, [selectedIndex, setSelectedIndex, results])
+
+  const onConfirm = useCallback(() => {
+    onResult(results[selectedIndex])
+  }, [onResult, selectedIndex, results])
+
+  useEffect(() => {
+    events.addEventListener('next', onNext)
+    events.addEventListener('prev', onPrev)
+    events.addEventListener('confirm', onConfirm)
+
+    return () => {
+      events.removeEventListener('next', onNext)
+      events.removeEventListener('prev', onPrev)
+      events.removeEventListener('confirm', onConfirm)
+    }
+  }, [events, onNext, onPrev, onResult])
+
+  const ref = useRef(null)
+
+  const setPosition = useCallback(() => {
+    if (!ref.current) return
+    const parentRect = ref.current.parentElement.getBoundingClientRect()
+    const parentYOffset = parseFloat(getComputedStyle(ref.current.parentElement).fontSize) * 1.3
+    const rect = ref.current.getBoundingClientRect()
+    const x = Math.min(parentRect.x, window.innerWidth - rect.width)
+    const y = parentRect.y + rect.height + parentYOffset > window.innerHeight ?
+      parentRect.y - rect.height
+      : parentRect.y + parentYOffset
+
+    ref.current.style.transform = `translate(${x}px, ${y}px)`
+  }, [ref])
+
+  useLayoutEffect(() => {
+    setPosition()
+  })
+
+  useEffect(() => {
+    window.addEventListener('resize', setPosition)
+    return () => window.removeEventListener('resize', setPosition)
+  }, [setPosition])
+
+  const resultItems = results.map((result, i) =>
     <div
-      className={`result ${i === autocomplete.selectedIndex ? 'is-selected' : ''}`}
+      className={`result ${i === selectedIndex ? 'is-selected' : ''}`}
       key={i}
-      onMouseOver={() => autocomplete.setSelectedIndex(i)}
-      onClick={() =>
-        autocomplete.commitResult(autocomplete.type.key, result, autocomplete.start, autocomplete.end)}>
+      onMouseOver={() => setSelectedIndex(i)}
+      onClick={() => onResult(result)} >
       {result.img ? <img src={result.img} width="50" height="50" /> : null}
-      <strong>{result.text.slice(0, autocomplete.matched.length)}</strong>
-      {result.text.slice(autocomplete.matched.length)}
+      <strong>{result.text.slice(0, text.length - 1)}</strong>
+      {result.text.slice(text.length - 1)}
     </div>
-  ) : []
+  )
 
-  return <span className="autocompletable" data-offset-key={props.offsetKey}>
-    {resultItems.length > 0 ? <div className="autocomplete">
-      {resultItems}
-    </div> : null}
-    {props.children}
-  </span>
+  return resultItems.length > 0 ?
+      <div className="autocomplete" ref={ref}>{resultItems}</div>
+      : null
 }
 
 const autocompleteEntityDecorator = (type) => {
@@ -101,31 +130,76 @@ const autocompleteEntityDecorator = (type) => {
         x.getEntity() && contentState.getEntity(x.getEntity()).getType() === type.key
       , callback),
     component: (props) => {
-      const result = props.contentState.getEntity(props.entityKey).getData()
+      if (!props.entityKey) return null
 
-      return <span className={`entity ${type.class}`} data-offset-key={props.offsetKey} contentEditable={false}>
-        {result.img ? <img src={result.img} width="50" height="50" /> : null}
-        {result.text}
-      </span>
+      const result = props.contentState.getEntity(props.entityKey).getData()
+      const {entityKey, events} = useContext(AutocompleteContext)
+      const isEntity = props.entityKey === entityKey
+
+      useEffect(() => {
+        if (props.decoratedText.indexOf(type.prefix) === -1) {
+          events.dispatchEvent(new CustomEvent('remove', {
+            detail: {
+              start: props.start,
+              end: props.end
+            }
+          }))
+        }
+      }, [events, props])
+
+      const results = genResults[type.key](
+        props.decoratedText.replace(/^(#|@|<>)/, '').replace('\u2009', '')
+      )
+
+      const onResult = useCallback((result) => {
+        events.dispatchEvent(new CustomEvent('finalize', {
+          detail: {
+            start: props.start,
+            end: props.end,
+            type: type,
+            result: result ? result : {text: props.decoratedText}
+          }
+        }))
+      }, [events, props])
+
+      const onCancel = useCallback(() => onResult(), [onResult])
+
+      useEffect(() => {
+        if (!isEntity) return
+        events.addEventListener('cancel', onCancel)
+
+        return () => {
+          events.removeEventListener('cancel', onCancel)
+        }
+      }, [isEntity, events, onCancel])
+
+      return result.text ?
+        <span className={`entity ${type.class}`} data-offset-key={props.offsetKey} contentEditable={false} >
+          {result.text}
+        </span>
+        : <span className={`entity ${type.class}`} data-offset-key={props.offsetKey} >
+          {isEntity ? <Autocomplete
+              text={props.decoratedText}
+              results={results}
+              onResult={onResult}
+              events={events} /> : null}
+          {props.children}
+        </span>
     }
   }
 }
 
 const compositeDecorator = new CompositeDecorator(
   AUTOCOMPLETE_TYPES.map(autocompleteEntityDecorator)
-  .concat([{
-    strategy: autocompleteStrategy,
-    component: Autocomplete
-  }])
 )
 
 function MyEditor() {
   const [editorState, setEditorState] = useState(
     EditorState.createWithContent(
-      ContentState.createFromText('by Zolmeister #dog @Bob <>Miami'), compositeDecorator)
+      ContentState.createFromText('by Zolmeister # @ <>'), compositeDecorator)
   )
 
-  const commitResult = useCallback((entityType, result, start, end) => {
+  const createAutocompleteEntity = useCallback((type, start, end) => {
     let contentState = editorState.getCurrentContent()
     const selection = editorState.getSelection().merge({
       anchorOffset: start,
@@ -133,11 +207,60 @@ function MyEditor() {
       isBackward: false
     })
 
-    contentState = contentState.createEntity(
-      entityType,
-      'IMMUTABLE',
-      result
+    contentState = contentState.createEntity(type.key, 'MUTABLE')
+
+    contentState = Modifier.replaceText(
+      contentState,
+      selection,
+      // XXX: Keep cursor within entity with thin-space
+      type.prefix + '\u2009',
+      null,
+      contentState.getLastCreatedEntityKey()
     )
+
+    const newEditorState =
+      EditorState.push(editorState, contentState, 'insert-autocomplete-entity')
+
+    setEditorState(EditorState.forceSelection(newEditorState, selection.merge({
+      anchorOffset: start + type.prefix.length,
+      focusOffset: start + type.prefix.length
+    })))
+  })
+
+  const autocompleteEvents = useMemo(() => new EventTarget(), [])
+  const autocompleteEntityKey = useMemo(() => {
+    const selection = editorState.getSelection()
+    const anchorKey = selection.getAnchorKey()
+    const anchorOffset = selection.getAnchorOffset()
+    const block = editorState.getCurrentContent().getBlockForKey(anchorKey)
+    const blockText = block.getText()
+    const blockCharacterMetadata = block.getCharacterList()
+    const meta = blockCharacterMetadata.get(anchorOffset - 1)
+
+    if (!meta || !meta.getEntity()) {
+      AUTOCOMPLETE_TYPES.forEach((type) => {
+        const start = anchorOffset - type.prefix.length
+        const blockPrefix = blockText.slice(start, anchorOffset)
+        if (blockPrefix === type.prefix) {
+          createAutocompleteEntity(type, start, anchorOffset)
+        }
+      })
+    }
+
+    return meta && meta.getEntity()
+  }, [editorState])
+
+  const onAutocompleteFinalize = useCallback((e) => {
+    const {start, end, type, result} = e.detail
+
+    let contentState = editorState.getCurrentContent()
+    contentState = contentState.createEntity(type.key, 'IMMUTABLE', result)
+
+    const selection = editorState.getSelection().merge({
+      anchorOffset: start,
+      focusOffset: end,
+      isBackward: false
+    })
 
     contentState = Modifier.replaceText(
       contentState,
@@ -153,53 +276,45 @@ function MyEditor() {
       ' '
     )
 
-    setEditorState(EditorState.push(editorState, contentState, 'insert-autocomplete-entity'))
-  }, [editorState, setEditorState, autocompleteState])
+    setEditorState(EditorState.push(editorState, contentState, 'replace-autocomplete-entity'))
+  }, [editorState])
 
-  const [autocompleteIndex, setAutocompleteIndex] = useState(0)
-  const autocompleteState = useMemo(() => {
-    const selection = editorState.getSelection()
-    const anchorKey = selection.getAnchorKey()
-    const anchorOffset = selection.getAnchorOffset()
-    const block = editorState.getCurrentContent().getBlockForKey(anchorKey)
-    const blockText = block.getText()
-    const blockCharacterMetadata = block.getCharacterList()
+  const onAutocompleteRemove = useCallback((e) => {
+    const {start, end} = e.detail
 
-    let i = anchorOffset
-    while (--i > 0) {
-      const meta = blockCharacterMetadata.get(i)
-      if (meta && Boolean(meta.getEntity())) return null
-      if (/\s/.test(blockText[i])) {
-        i += 1
-        break
-      }
-    }
+    let contentState = editorState.getCurrentContent()
 
-    const match = [...blockText.slice(i, anchorOffset).matchAll(AUTOCOMPLETE_REGEX)]
-    if (match.length === 0) return null
-    const type = AUTOCOMPLETE_PREFIX_TO_TYPE[match[0][2]]
-    const text = match[0][3]
+    const selection = editorState.getSelection().merge({
+      anchorOffset: start,
+      focusOffset: end,
+      isBackward: false
+    })
 
-    return {
-      start: i,
-      end: anchorOffset,
-      type: type,
-      text: text,
-      matched: match[0][0],
-      results: genResults[type.key](text),
-      selectedIndex: autocompleteIndex,
-      setSelectedIndex: setAutocompleteIndex,
-      blockKey: anchorKey,
-      commitResult: commitResult
-    }
-  }, [editorState, autocompleteIndex, setAutocompleteIndex, commitResult])
+    contentState = Modifier.replaceText(
+      contentState,
+      selection,
+      '',
+      null,
+      null
+    )
+
+    setEditorState(EditorState.push(editorState, contentState, 'remove-autocomplete-entity'))
+  }, [editorState])
 
   useEffect(() => {
-    setAutocompleteIndex(0)
-  }, [autocompleteState && autocompleteState.results, setAutocompleteIndex])
+    autocompleteEvents.addEventListener('finalize', onAutocompleteFinalize)
+    autocompleteEvents.addEventListener('remove', onAutocompleteRemove)
+    return () => {
+      autocompleteEvents.removeEventListener('finalize', onAutocompleteFinalize)
+      autocompleteEvents.removeEventListener('remove', onAutocompleteRemove)
+    }
+  }, [autocompleteEvents, onAutocompleteFinalize, onAutocompleteRemove])
 
   const keyBindingsFn = useCallback((e: SyntheticKeyboardEvent): string => {
-    const isCompleting = Boolean(autocompleteState)
+    const isCompleting = Boolean(autocompleteEntityKey)
+    const isHashtag = autocompleteEntityKey &&
+      editorState.getCurrentContent().getEntity(autocompleteEntityKey).getType() === 'HASH'
+
     if (isCompleting && e.keyCode === 38) { // UP
       return 'autocomplete-prev'
     }
@@ -209,34 +324,42 @@ function MyEditor() {
     }
 
     if (isCompleting && (e.keyCode === 9 || e.keyCode === 13)) { // TAB, ENTER
-      return 'autocomplete-commit'
+      return 'autocomplete-confirm'
+    }
+
+    if (isCompleting && (e.keyCode === 27 || isHashtag && e.keyCode === 32)) { // ESC, SPACE
+      return 'autocomplete-cancel'
     }
 
     return getDefaultKeyBinding(e)
-  }, [autocompleteState])
+  }, [autocompleteEntityKey, editorState])
 
   const handleKeyCommand = useCallback((command: string) => {
-    if (command === 'autocomplete-next') {
-      setAutocompleteIndex((autocompleteIndex + 1) % autocompleteState.results.length)
-      return 'handled'
+    switch (command) {
+      case 'autocomplete-next':
+        autocompleteEvents.dispatchEvent(new CustomEvent('next'))
+        break
+      case 'autocomplete-prev':
+        autocompleteEvents.dispatchEvent(new CustomEvent('prev'))
+        break
+      case 'autocomplete-confirm':
+        autocompleteEvents.dispatchEvent(new CustomEvent('confirm'))
+        break
+      case 'autocomplete-cancel':
+        autocompleteEvents.dispatchEvent(new CustomEvent('cancel'))
+        break
+      default:
+        return 'not-handled'
     }
 
-    if (command === 'autocomplete-prev') {
-      setAutocompleteIndex(autocompleteIndex === 0 ? autocompleteState.results.length - 1 : autocompleteIndex - 1)
-      return 'handled'
-    }
-
-    if (command === 'autocomplete-commit') {
-      const {type, results, start, end} = autocompleteState
-      autocompleteState.commitResult(type.key, results[autocompleteIndex], start, end)
-      return 'handled'
-    }
-
-    return 'not-handled'
-  }, [autocompleteIndex, setAutocompleteIndex, autocompleteState])
+    return 'handled'
+  }, [autocompleteEvents])
 
   return <div>
-    <AutocompleteContext.Provider value={autocompleteState}>
+    <AutocompleteContext.Provider value={{
+        entityKey: autocompleteEntityKey,
+        events: autocompleteEvents
+      }}>
       <Editor
         editorState={editorState}
         onChange={setEditorState}
