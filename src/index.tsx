@@ -137,15 +137,17 @@ const autocompleteEntityDecorator = (type) => {
       const isEntity = props.entityKey === entityKey
 
       useEffect(() => {
-        if (props.decoratedText.indexOf(type.prefix) === -1) {
+        if (props.decoratedText.indexOf(type.prefix) === -1 ||
+            props.decoratedText.indexOf('\u2009') === -1 && !result.text) {
           events.dispatchEvent(new CustomEvent('remove', {
             detail: {
               start: props.start,
-              end: props.end
+              end: props.end + 1,
+              text: props.decoratedText
             }
           }))
         }
-      }, [events, props])
+      }, [props, events])
 
       const results = genResults[type.key](
         props.decoratedText.replace(/^(#|@|<>)/, '').replace('\u2009', '')
@@ -157,7 +159,7 @@ const autocompleteEntityDecorator = (type) => {
             start: props.start,
             end: props.end,
             type: type,
-            result: result ? result : {text: props.decoratedText}
+            result: result ? result : {text: props.decoratedText.trim()}
           }
         }))
       }, [events, props])
@@ -175,14 +177,16 @@ const autocompleteEntityDecorator = (type) => {
 
       return result.text ?
         <span className={`entity ${type.class}`} data-offset-key={props.offsetKey} contentEditable={false} >
-          {result.text}
+          {result.text + '\u2009'}
         </span>
         : <span className={`entity ${type.class}`} data-offset-key={props.offsetKey} >
-          {isEntity ? <Autocomplete
+          {isEntity ?
+            <Autocomplete
               text={props.decoratedText}
               results={results}
               onResult={onResult}
-              events={events} /> : null}
+              events={events} />
+            : null}
           {props.children}
         </span>
     }
@@ -235,9 +239,11 @@ function MyEditor() {
     const block = editorState.getCurrentContent().getBlockForKey(anchorKey)
     const blockText = block.getText()
     const blockCharacterMetadata = block.getCharacterList()
-    const meta = blockCharacterMetadata.get(anchorOffset - 1)
+    const meta = blockCharacterMetadata.get(anchorOffset)
+    const prevMeta = blockCharacterMetadata.get(anchorOffset - 1)
+    const isWithinEntity = meta && prevMeta && meta.getEntity() === prevMeta.getEntity()
 
-    if (!meta || !meta.getEntity()) {
+    if (!prevMeta || !prevMeta.getEntity()) {
       AUTOCOMPLETE_TYPES.forEach((type) => {
         const start = anchorOffset - type.prefix.length
         const blockPrefix = blockText.slice(start, anchorOffset)
@@ -247,7 +253,7 @@ function MyEditor() {
       })
     }
 
-    return meta && meta.getEntity()
+    return isWithinEntity && meta.getEntity()
   }, [editorState])
 
   const onAutocompleteFinalize = useCallback((e) => {
@@ -280,25 +286,38 @@ function MyEditor() {
   }, [editorState])
 
   const onAutocompleteRemove = useCallback((e) => {
-    const {start, end} = e.detail
+    const {start, end, text} = e.detail
 
     let contentState = editorState.getCurrentContent()
 
-    const selection = editorState.getSelection().merge({
+    const entitySelection = editorState.getSelection().merge({
       anchorOffset: start,
       focusOffset: end,
       isBackward: false
     })
 
-    contentState = Modifier.replaceText(
+    const cursorSelection = entitySelection.merge({
+      anchorOffset: start,
+      focusOffset: start,
+      isBackward: false
+    })
+
+    contentState = Modifier.removeRange(
       contentState,
-      selection,
-      '',
-      null,
-      null
+      entitySelection,
+      'forward'
     )
 
-    setEditorState(EditorState.push(editorState, contentState, 'remove-autocomplete-entity'))
+    contentState = Modifier.insertText(
+      contentState,
+      cursorSelection,
+      text
+    )
+
+    let newEditorState = EditorState.push(editorState, contentState, 'remove-autocomplete-entity')
+    newEditorState = EditorState.forceSelection(newEditorState, cursorSelection)
+
+    setEditorState(newEditorState)
   }, [editorState])
 
   useEffect(() => {

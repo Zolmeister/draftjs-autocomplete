@@ -68,11 +68,9 @@ body {
 }
 
 .entity {
-  position: relative;
   background: #616161;
-  padding: 0.1em 0.3em;
+  padding: 0.1em 0.2em 0.1em 0.3em;
   border-radius: 0.2em;
-  /* user-select: none; */
   white-space: nowrap;
 }
 
